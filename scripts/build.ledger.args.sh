@@ -92,8 +92,9 @@ ARG_FILE="$(jq -re .canisters.ledger.init_arg_file dfx.json)"
 
 mkdir -p "$(dirname "$ARG_FILE")"
 
+# Init requires `metadata` (vec, not opt). With no logo, use an empty vec — do not omit the field.
 LOGO_METADATA_OPT=""
-LOGO_METADATA=""
+LOGO_METADATA="metadata = vec {};"
 if [[ "$HAS_LOGO" == true ]]; then
   LOGO_METADATA_OPT="metadata = opt vec { record { \"icrc1:logo\"; variant { Text = \"$DATA_URI\" } } };"
   LOGO_METADATA="metadata = vec { record { \"icrc1:logo\"; variant { Text = \"$DATA_URI\" } } };"

@@ -1,12 +1,15 @@
 {
 	"canisters": {
 		"minter": {
+			"dependencies": ["ledger"],
 			"candid": "src/minter/minter.did",
 			"declarations": {
 				"node_compatibility": true
 			},
-			"package": "minter",
-			"type": "rust"
+			"init_arg_file": "out/build.minter.args.did",
+			"pre_install": "scripts/build.minter.args.sh",
+			"type": "rust",
+			"package": "minter"
 		},
 		"ledger": {
 			"type": "custom",
