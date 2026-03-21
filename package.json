@@ -1,6 +1,7 @@
 {
 	"name": "vici",
 	"scripts": {
+		"build": "./scripts/build.sh",
 		"format": "prettier --write . && ./scripts/format.sh",
 		"format:rust": "./scripts/format.rust.sh",
 		"lint": "prettier --check . && ./scripts/lint.sh",
