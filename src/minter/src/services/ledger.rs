@@ -1,5 +1,5 @@
 use candid::{Nat, Principal};
-use ic_cdk::{api::time, call};
+use ic_cdk::{api::time, call::Call};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
@@ -14,11 +14,15 @@ pub(crate) async fn get_balance(
     ledger_id: Principal,
     account: &Account,
 ) -> Result<Nat, MinterError> {
-    let (balance,): (Nat,) = call(ledger_id, "icrc1_balance_of", (account,))
+    let response = Call::bounded_wait(ledger_id, "icrc1_balance_of")
+        .with_args(&(account,))
         .await
         .map_err(|e| MinterError::LedgerError {
             message: format!("Balance query failed: {e:?}"),
         })?;
+    let (balance,) = response.candid_tuple().map_err(|e| MinterError::LedgerError {
+        message: format!("Balance query response decode failed: {e:?}"),
+    })?;
     Ok(balance)
 }
 
@@ -45,11 +49,15 @@ pub(crate) async fn mint_to(
         created_at_time: Some(time()),
     };
 
-    let (result,): (Result<Nat, TransferError>,) = call(ledger_id, "icrc1_transfer", (arg,))
+    let response = Call::bounded_wait(ledger_id, "icrc1_transfer")
+        .with_arg(arg)
         .await
         .map_err(|e| MinterError::LedgerError {
             message: format!("Transfer call failed: {e:?}"),
         })?;
+    let (result,) = response.candid_tuple().map_err(|e| MinterError::LedgerError {
+        message: format!("Transfer response decode failed: {e:?}"),
+    })?;
 
     match result {
         Ok(block_index) => Ok(block_index),

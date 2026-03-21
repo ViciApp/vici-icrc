@@ -212,14 +212,17 @@ fn set_global_policy(policy: GlobalPolicy) -> SetGlobalPolicyResult {
     set_global_policy_impl(policy).into()
 }
 
-fn release_stuck_mint_state_impl(arg: &ReleaseStuckMintArg) -> Result<(), MinterError> {
+fn release_stuck_mint_state_impl(
+    reserve_id: u64,
+    idempotency_key: Option<&str>,
+) -> Result<(), MinterError> {
     STATE.with_borrow_mut(|s| {
-        s.reserve_mint_inflight.remove(&arg.reserve_id);
-        if let Some(ref k) = arg.idempotency_key {
+        s.reserve_mint_inflight.remove(&reserve_id);
+        if let Some(k) = idempotency_key {
             match s.idempotency.get(k) {
-                Some(IdempotencyRecord::Pending { reserve_id })
-                    if *reserve_id == arg.reserve_id =>
-                {
+                Some(IdempotencyRecord::Pending {
+                    reserve_id: pending_rid,
+                }) if *pending_rid == reserve_id => {
                     s.idempotency.remove(k);
                 }
                 Some(IdempotencyRecord::Pending { .. }) => {
@@ -241,9 +244,13 @@ fn release_stuck_mint_state_impl(arg: &ReleaseStuckMintArg) -> Result<(), Minter
 /// key only when it is still pending for the same `reserve_id`; otherwise returns
 /// `MinterError::InvalidConfig` if the key is pending for another reserve.
 #[update(guard = "caller_is_controller")]
-#[expect(clippy::needless_pass_by_value)] // Candid / CDK pass decoded args by value
-fn release_stuck_mint_state(arg: ReleaseStuckMintArg) -> ReleaseStuckMintResult {
-    release_stuck_mint_state_impl(&arg).into()
+fn release_stuck_mint_state(
+    ReleaseStuckMintArg {
+        reserve_id,
+        idempotency_key,
+    }: ReleaseStuckMintArg,
+) -> ReleaseStuckMintResult {
+    release_stuck_mint_state_impl(reserve_id, idempotency_key.as_deref()).into()
 }
 
 // ---------------------------------------------------------------------------

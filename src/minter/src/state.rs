@@ -57,7 +57,7 @@ thread_local! {
 /// Candid-encoded payload.  Called from the `pre_upgrade` hook.
 pub fn save_state() {
     use candid::encode_one;
-    use ic_cdk::api::stable::{stable_grow, stable_size, stable_write};
+    use ic_cdk::stable::{stable_grow, stable_size, stable_write};
 
     let state = STATE.with_borrow(Clone::clone);
     let bytes = encode_one(&state).expect("failed to encode minter state");
@@ -81,7 +81,7 @@ pub fn save_state() {
 /// `post_upgrade` hook.
 pub fn try_restore_state() -> bool {
     use candid::decode_one;
-    use ic_cdk::api::stable::{stable_read, stable_size};
+    use ic_cdk::stable::{stable_read, stable_size};
 
     let size = stable_size();
     if size == 0 {
