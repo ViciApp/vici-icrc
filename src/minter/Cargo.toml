@@ -1,0 +1,14 @@
+[package]
+name = "minter"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+
+[dev-dependencies]
+pocket-ic = { workspace = true }

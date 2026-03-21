@@ -1,0 +1,21 @@
+{
+	"name": "vici",
+	"scripts": {
+		"format": "prettier --write . && ./scripts/format.sh",
+		"format:rust": "./scripts/format.rust.sh",
+		"lint": "prettier --check . && ./scripts/lint.sh",
+		"lint:rust": "./scripts/lint.rust.sh --fix",
+		"quality": "npm run format && npm run lint",
+		"quality:rust": "npm run format:rust && npm run lint:rust",
+		"did": "./scripts/did.sh && npm run format && npm run lint",
+		"deploy:staging": "dfx deploy --network staging --upgrade-unchanged",
+		"reinstall:ledger:staging": "DFX_NETWORK=staging ./scripts/build.ledger.args.sh init && dfx canister install ledger --mode reinstall --network staging --argument-file ./out/build.ledger.args.did --upgrade-unchanged",
+		"reinstall:index:staging": "DFX_NETWORK=staging ./scripts/build.index.args.sh init && dfx canister install index --mode reinstall --network staging --argument-file ./out/build.index.args.did --upgrade-unchanged"
+	},
+	"devDependencies": {
+		"@icp-sdk/bindgen": "^0.2.3",
+		"prettier": "^3.6.2",
+		"prettier-plugin-motoko": "^0.12.1",
+		"prettier-plugin-organize-imports": "^4.3.0"
+	}
+}
