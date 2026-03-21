@@ -24,15 +24,47 @@ The ledger and index canisters are the official DFINITY implementations from the
                                 ▼
 ┌──────────┐           ┌────────────────┐
 │  Users / │  ICRC-1   │                │
-│  dApps   │◄─────────►│    Ledger      │
-│          │  ICRC-2   │  (DFINITY)     │
+│  dApps   │◄─────────►│     Ledger     │
+│          │  ICRC-2   │                │
 └──────────┘           └───────┬────────┘
                                │ block feed
                                ▼
                         ┌──────────────┐
+                        │              │
                         │    Index     │
-                        │  (DFINITY)   │
+                        │              │
                         └──────────────┘
+```
+
+**Diagram choice:** use a **flowchart** (or the ASCII above) for static topology—what depends on what. Use a **sequence diagram** when you want the **order of calls** for one concrete flow (for example minting into a reserve). Neither is “wrong”; they answer different questions.
+
+### Mermaid — topology
+
+```mermaid
+flowchart TB
+  M[Minter]
+  L[Ledger]
+  I[Index]
+  U[Users / dApps]
+
+  M -->|"icrc1_transfer (mint)"| L
+  U <-->|"ICRC-1 / ICRC-2"| L
+  L -->|"block feed / sync"| I
+```
+
+### Mermaid — mint to reserve (illustrative sequence)
+
+Only the minter may create new tokens; it does so by transferring from the ledger’s minting account to a configured reserve.
+
+```mermaid
+sequenceDiagram
+  participant M as Minter
+  participant L as Ledger
+  participant R as Reserve account
+
+  M->>L: icrc1_transfer (minting account → reserve)
+  L-->>M: Ok / err (new block)
+  Note over L,R: Reserve balance increases; rules in minter README apply.
 ```
 
 ### Ledger
@@ -75,7 +107,7 @@ The token distribution model, supply schedule, and reserve allocation strategy a
 vici-icrc/
   dfx.json                   Canister declarations (minter, ledger, index)
   Cargo.toml                 Rust workspace root
-  TOKENOMICS.md              Token economics (placeholder)
+  TOKENOMICS.md              Token economics and reserve-aligned supply policy
   src/
     minter/                  Minter canister (Rust)
       Cargo.toml
