@@ -289,6 +289,25 @@ pub enum RebalanceAction {
 }
 
 // ---------------------------------------------------------------------------
+// Rebalance response (shared between API and service layers)
+// ---------------------------------------------------------------------------
+
+/// Response from a rebalance operation on a single reserve.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+pub struct RebalanceResponse {
+    /// The reserve that was rebalanced.
+    pub reserve_id: u64,
+    /// What happened during the rebalance.
+    pub action: RebalanceAction,
+    /// Balance of the reserve's account before the rebalance.
+    pub balance_before: Nat,
+    /// Amount of tokens that were actually minted (0 if nothing was minted).
+    pub minted_amount: Nat,
+    /// Ledger block index of the mint transaction, if any.
+    pub ledger_block_index: Option<Nat>,
+}
+
+// ---------------------------------------------------------------------------
 // Internal (not exposed over Candid)
 // ---------------------------------------------------------------------------
 

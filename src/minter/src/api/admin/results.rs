@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat};
 use serde::{Deserialize, Serialize};
 
-use crate::model::{MinterError, RebalanceAction, ReserveConfig};
+use crate::model::{MinterError, RebalanceAction, RebalanceResponse, ReserveConfig};
 
 // ---------------------------------------------------------------------------
 // Response structs (success payloads)
@@ -16,21 +16,6 @@ pub struct ManualTopupResponse {
     pub minted_amount: Nat,
     /// Block index on the ledger where the mint was recorded.
     pub ledger_block_index: Nat,
-}
-
-/// Response from a rebalance operation on a single reserve.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub struct RebalanceResponse {
-    /// The reserve that was rebalanced.
-    pub reserve_id: u64,
-    /// What happened during the rebalance.
-    pub action: RebalanceAction,
-    /// Balance of the reserve's account before the rebalance.
-    pub balance_before: Nat,
-    /// Amount of tokens that were actually minted (0 if nothing was minted).
-    pub minted_amount: Nat,
-    /// Ledger block index of the mint transaction, if any.
-    pub ledger_block_index: Option<Nat>,
 }
 
 /// Preview of what a rebalance *would* do without actually minting.

@@ -6,17 +6,16 @@ use super::{
     results::{
         AddReserveResult, ManualTopupReserveResult, ManualTopupResponse,
         PreviewRebalanceReserveResult, PreviewRebalanceResponse, RebalanceReserveResult,
-        RebalanceResponse, ReleaseStuckMintResult, RemoveReserveResult, SetGlobalPolicyResult,
-        UpdateReserveResult,
+        ReleaseStuckMintResult, RemoveReserveResult, SetGlobalPolicyResult, UpdateReserveResult,
     },
 };
 use crate::{
     guards::{caller_is_controller, caller_is_not_anonymous},
     model::{
-        GlobalPolicy, IdempotencyEntry, IdempotencyRecord, MintEvent, MinterError, RebalanceAction,
-        ReserveConfig, ReserveRecord,
+        GlobalPolicy, IdempotencyEntry, IdempotencyRecord, MintEvent, MinterError, ReserveConfig,
+        ReserveRecord,
     },
-    services::{ledger, reserve},
+    services::{ledger, rebalance, reserve},
     state::STATE,
 };
 
@@ -257,12 +256,6 @@ fn release_stuck_mint_state(
 // Mint coordination (no `await` inside these closures)
 // ---------------------------------------------------------------------------
 
-fn release_reserve_mint_lock(reserve_id: u64) {
-    STATE.with_borrow_mut(|s| {
-        s.reserve_mint_inflight.remove(&reserve_id);
-    });
-}
-
 fn rollback_manual_mint_begin(reserve_id: u64, idempotency_key: Option<&str>) {
     STATE.with_borrow_mut(|s| {
         s.reserve_mint_inflight.remove(&reserve_id);
@@ -281,127 +274,8 @@ fn rollback_manual_mint_begin(reserve_id: u64, idempotency_key: Option<&str>) {
 }
 
 // ---------------------------------------------------------------------------
-// Rebalance
+// Rebalance (delegates to services::rebalance)
 // ---------------------------------------------------------------------------
-
-/// Core rebalance logic for a single reserve (shared by the public
-/// single-reserve and all-reserves endpoints).
-///
-/// 1. Takes a per-reserve mint lock, then loads config and counters.
-/// 2. Queries the ledger for the current balance.
-/// 3. Computes the ideal mint amount via [`reserve::compute_rebalance`].
-/// 4. Caps the amount by the available rate-limit budget (if any).
-/// 5. Mints tokens to the reserve's account on the ledger.
-/// 6. Updates `lifetime_minted`, records the mint event, prunes old events, and drops the lock.
-async fn rebalance_reserve_inner(id: u64) -> Result<RebalanceResponse, MinterError> {
-    let (ledger_id, config, lifetime_minted, mint_events, policy) =
-        STATE.with_borrow_mut(|s| -> Result<_, MinterError> {
-            let record = s
-                .reserves
-                .get(&id)
-                .ok_or(MinterError::ReserveNotFound { id })?;
-            if !s.reserve_mint_inflight.insert(id) {
-                return Err(MinterError::ReserveOperationInProgress { id });
-            }
-            Ok((
-                s.ledger_id,
-                record.config.clone(),
-                record.lifetime_minted.clone(),
-                record.mint_events.clone(),
-                s.global_policy.clone(),
-            ))
-        })?;
-
-    let balance = match ledger::get_balance(ledger_id, &config.account).await {
-        Ok(b) => b,
-        Err(e) => {
-            release_reserve_mint_lock(id);
-            return Err(e);
-        }
-    };
-
-    let computed = match reserve::compute_rebalance(&config, &balance, &lifetime_minted, &policy) {
-        Ok(c) => c,
-        Err(e) => {
-            release_reserve_mint_lock(id);
-            return Err(e);
-        }
-    };
-
-    match computed.action {
-        RebalanceAction::Minted => {
-            let mut mint_amount = computed.mint_amount;
-
-            let now = time();
-            if let Some(budget) =
-                reserve::available_mint_budget(config.rate_limits.as_ref(), &mint_events, now)
-            {
-                if budget == 0_u64 {
-                    release_reserve_mint_lock(id);
-                    return Ok(RebalanceResponse {
-                        reserve_id: id,
-                        action: RebalanceAction::Skipped {
-                            reason: String::from("Rate limit budget exhausted"),
-                        },
-                        balance_before: balance,
-                        minted_amount: Nat::from(0_u64),
-                        ledger_block_index: None,
-                    });
-                }
-                if mint_amount > budget {
-                    mint_amount = budget;
-                }
-            }
-
-            let memo = format!("rebalance:{id}");
-            let block_index =
-                match ledger::mint_to(ledger_id, &config.account, mint_amount.clone(), &memo).await
-                {
-                    Ok(b) => b,
-                    Err(e) => {
-                        release_reserve_mint_lock(id);
-                        return Err(e);
-                    }
-                };
-
-            STATE.with_borrow_mut(|s| -> Result<(), MinterError> {
-                s.reserve_mint_inflight.remove(&id);
-                let record = s.reserves.get_mut(&id).ok_or_else(|| {
-                    MinterError::InternalInvariantViolated {
-                        reason: String::from(
-                            "reserve missing after successful ledger mint; call release_stuck_mint_state if needed",
-                        ),
-                    }
-                })?;
-                record.lifetime_minted += mint_amount.clone();
-                record.mint_events.push(MintEvent {
-                    timestamp_ns: now,
-                    amount: mint_amount.clone(),
-                });
-                reserve::prune_old_events(&mut record.mint_events, now);
-                Ok(())
-            })?;
-
-            Ok(RebalanceResponse {
-                reserve_id: id,
-                action: RebalanceAction::Minted,
-                balance_before: balance,
-                minted_amount: mint_amount,
-                ledger_block_index: Some(block_index),
-            })
-        }
-        action => {
-            release_reserve_mint_lock(id);
-            Ok(RebalanceResponse {
-                reserve_id: id,
-                action,
-                balance_before: balance,
-                minted_amount: Nat::from(0_u64),
-                ledger_block_index: None,
-            })
-        }
-    }
-}
 
 /// Triggers a rebalance for a single reserve by its id.
 ///
@@ -409,7 +283,7 @@ async fn rebalance_reserve_inner(id: u64) -> Result<RebalanceResponse, MinterErr
 /// minting to this reserve, returns [`MinterError::ReserveOperationInProgress`].
 #[update(guard = "caller_is_controller")]
 async fn rebalance_reserve(id: u64) -> RebalanceReserveResult {
-    rebalance_reserve_inner(id).await.into()
+    rebalance::rebalance_one(id).await.into()
 }
 
 /// Triggers a rebalance for every registered reserve, sequentially.
@@ -418,12 +292,11 @@ async fn rebalance_reserve(id: u64) -> RebalanceReserveResult {
 /// remaining reserves from being processed.
 #[update(guard = "caller_is_controller")]
 async fn rebalance_all_reserves() -> Vec<RebalanceReserveResult> {
-    let ids: Vec<u64> = STATE.with_borrow(|s| s.reserves.keys().copied().collect());
-    let mut results = Vec::with_capacity(ids.len());
-    for id in ids {
-        results.push(rebalance_reserve_inner(id).await.into());
-    }
-    results
+    rebalance::rebalance_all()
+        .await
+        .into_iter()
+        .map(Into::into)
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

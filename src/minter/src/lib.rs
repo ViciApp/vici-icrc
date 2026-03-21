@@ -20,6 +20,7 @@ use crate::{
         query::results::{GetReserveResult, ReserveInfo},
     },
     model::{AddReserveArg, Arg, GlobalPolicy},
+    services::timer::start_rebalance_timer,
     state::{save_state, try_restore_state, STATE},
 };
 
@@ -35,6 +36,8 @@ fn init(arg: Arg) {
         }
         Arg::Upgrade => trap("expected Init variant for canister init"),
     }
+
+    start_rebalance_timer();
 }
 
 /// Serialises the entire canister state to stable memory before a code
@@ -60,6 +63,8 @@ fn post_upgrade(arg: Arg) {
             STATE.with_borrow_mut(|s| s.ledger_id = init_arg.ledger_id);
         }
     }
+
+    start_rebalance_timer();
 }
 
 export_candid!();
