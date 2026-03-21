@@ -115,11 +115,13 @@ vici-icrc/
       README.md              Minter documentation
       src/                   Source code
   scripts/
-    build.ledger.args.sh     Generates ledger init/upgrade arguments
-    build.index.args.sh      Generates index init arguments
-    did.sh                   Regenerates .did files from compiled WASM
-    format.sh                Code formatting
-    lint.sh                  Linting
+    build.ledger.args.sh              Generates ledger init/upgrade arguments
+    build.index.args.sh               Generates index init arguments
+    init.reserves.sh                  Register minter reserves (tokenomics caps)
+    init.reserves.config.example.sh   Copy to init.reserves.config.sh (gitignored)
+    did.sh                            Regenerates .did files from compiled WASM
+    format.sh                         Code formatting
+    lint.sh                           Linting
 ```
 
 ## Development
