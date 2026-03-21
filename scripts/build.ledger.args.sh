@@ -63,8 +63,14 @@ encode_b64() {
 
 MIME_TYPE="image/png"
 
-B64_LOGO="$(encode_b64 "$LOGO_FILE")"
-DATA_URI="data:${MIME_TYPE};base64,${B64_LOGO}"
+if [[ -f "$LOGO_FILE" ]]; then
+  B64_LOGO="$(encode_b64 "$LOGO_FILE")"
+  DATA_URI="data:${MIME_TYPE};base64,${B64_LOGO}"
+  HAS_LOGO=true
+else
+  ECHO "Warning: logo file '$LOGO_FILE' not found – skipping logo metadata"
+  HAS_LOGO=false
+fi
 
 PRINCIPAL="$(dfx identity get-principal)"
 MINTER_PRINCIPAL="${MINTER_PRINCIPAL:-$PRINCIPAL}"
@@ -86,6 +92,13 @@ ARG_FILE="$(jq -re .canisters.ledger.init_arg_file dfx.json)"
 
 mkdir -p "$(dirname "$ARG_FILE")"
 
+LOGO_METADATA_OPT=""
+LOGO_METADATA=""
+if [[ "$HAS_LOGO" == true ]]; then
+  LOGO_METADATA_OPT="metadata = opt vec { record { \"icrc1:logo\"; variant { Text = \"$DATA_URI\" } } };"
+  LOGO_METADATA="metadata = vec { record { \"icrc1:logo\"; variant { Text = \"$DATA_URI\" } } };"
+fi
+
 if [[ "$VARIANT" == "Upgrade" ]]; then
 
   # Use Upgrade variant: same values, but everything is opt
@@ -97,11 +110,7 @@ if [[ "$VARIANT" == "Upgrade" ]]; then
         token_name = opt "$TOKEN_NAME";
         transfer_fee = opt $TRANSFER_FEE;
         decimals = opt $DECIMALS;
-        metadata = opt vec {
-          record {
-            "icrc1:logo"; variant { Text = "$DATA_URI" }
-          }
-        };
+        ${LOGO_METADATA_OPT}
         feature_flags = opt record {
           icrc2 = true;
           icrc3 = true
@@ -122,13 +131,7 @@ else
         token_name = "$TOKEN_NAME";
         transfer_fee = $TRANSFER_FEE;
         decimals = opt $DECIMALS;
-        metadata = vec {
-          record {
-            "icrc1:logo"; variant {
-              Text = "$DATA_URI"
-            }
-          }
-        };
+        ${LOGO_METADATA}
         feature_flags = opt record {
           icrc2 = true;
           icrc3 = true

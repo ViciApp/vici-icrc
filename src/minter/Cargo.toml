@@ -1,7 +1,7 @@
 [package]
 name = "minter"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+edition = { workspace = true }
 
 [lib]
 crate-type = ["cdylib"]
@@ -9,6 +9,11 @@ crate-type = ["cdylib"]
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+icrc-ledger-types = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 pocket-ic = { workspace = true }
+
+[lints]
+workspace = true
