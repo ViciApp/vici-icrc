@@ -20,9 +20,11 @@ pub(crate) async fn get_balance(
         .map_err(|e| MinterError::LedgerError {
             message: format!("Balance query failed: {e:?}"),
         })?;
-    let (balance,) = response.candid_tuple().map_err(|e| MinterError::LedgerError {
-        message: format!("Balance query response decode failed: {e:?}"),
-    })?;
+    let (balance,) = response
+        .candid_tuple()
+        .map_err(|e| MinterError::LedgerError {
+            message: format!("Balance query response decode failed: {e:?}"),
+        })?;
     Ok(balance)
 }
 
@@ -55,9 +57,11 @@ pub(crate) async fn mint_to(
         .map_err(|e| MinterError::LedgerError {
             message: format!("Transfer call failed: {e:?}"),
         })?;
-    let (result,) = response.candid_tuple().map_err(|e| MinterError::LedgerError {
-        message: format!("Transfer response decode failed: {e:?}"),
-    })?;
+    let (result,) = response
+        .candid_tuple()
+        .map_err(|e| MinterError::LedgerError {
+            message: format!("Transfer response decode failed: {e:?}"),
+        })?;
 
     match result {
         Ok(block_index) => Ok(block_index),
