@@ -43,7 +43,7 @@ elif [[ "${DFX_NETWORK}" == "staging" ]]; then
   LOGO_FILE="assets/logo/ap6gq-taaaa-aaaae-acsaq-cai.png"
 else
   # For local env we use the same as ic, since we assume it is a local deployment
-  TOKEN_SYMBOL="VICI.p"
+  TOKEN_SYMBOL="VICI"
   TOKEN_NAME="Vici"
   # TODO: rename it with the ledger canister when it is released in production
   LOGO_FILE="assets/logo/prod_logo_1024.png"
