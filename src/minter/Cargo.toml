@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
 icrc-ledger-types = { workspace = true }
 serde = { workspace = true }
 
