@@ -25,3 +25,6 @@ dist/
 
 # environment variables
 .env
+
+# Local reserve principals (copy from scripts/init.reserves.config.example.sh)
+scripts/init.reserves.config.sh
