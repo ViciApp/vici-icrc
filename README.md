@@ -1,6 +1,17 @@
 # VICI ICRC
 
-VICI is a fungible token on the [Internet Computer](https://internetcomputer.org/) built on top of the **ICRC** family of standards. This repository contains the full on-chain infrastructure: ledger, index, and minter canisters.
+VICI is the reward and coordination token for the [Vici](https://vici.com) prediction platform, built on the [Internet Computer](https://internetcomputer.org/) using the **ICRC** family of standards. This repository contains the full on-chain infrastructure: ledger, index, and minter canisters.
+
+VICI is the **scarce reward layer** of Vici's dual-token model. It is earned by top and most active users through accuracy, liquidity provision, market creation, and oracle work. It provides real utility from day one: feature access, advanced modes, private competitions, staking, and governance.
+
+For the gameplay point system, see [vici-points](https://github.com/AntoninoVentworthy/vici-points) (VXP).
+
+## Dual-token model
+
+| Token          | Symbol | Role                                   | Repo                                                             |
+| -------------- | ------ | -------------------------------------- | ---------------------------------------------------------------- |
+| **Vici XP**    | VXP    | Gameplay / onboarding — everyone earns | [vici-points](https://github.com/AntoninoVentworthy/vici-points) |
+| **VICI Token** | VICI   | Reward / coordination — top users earn | **this repo**                                                    |
 
 ## Standards implemented
 
@@ -36,37 +47,6 @@ The ledger and index canisters are the official DFINITY implementations from the
                         └──────────────┘
 ```
 
-**Diagram choice:** use a **flowchart** (or the ASCII above) for static topology—what depends on what. Use a **sequence diagram** when you want the **order of calls** for one concrete flow (for example minting into a reserve). Neither is “wrong”; they answer different questions.
-
-### Mermaid — topology
-
-```mermaid
-flowchart TB
-  M[Minter]
-  L[Ledger]
-  I[Index]
-  U[Users / dApps]
-
-  M -->|"icrc1_transfer (mint)"| L
-  U <-->|"ICRC-1 / ICRC-2"| L
-  L -->|"block feed / sync"| I
-```
-
-### Mermaid — mint to reserve (illustrative sequence)
-
-Only the minter may create new tokens; it does so by transferring from the ledger’s minting account to a configured reserve.
-
-```mermaid
-sequenceDiagram
-  participant M as Minter
-  participant L as Ledger
-  participant R as Reserve account
-
-  M->>L: icrc1_transfer (minting account → reserve)
-  L-->>M: Ok / err (new block)
-  Note over L,R: Reserve balance increases; rules in minter README apply.
-```
-
 ### Ledger
 
 The **ledger canister** is the source of truth for VICI token balances and transactions. It implements ICRC-1, ICRC-2, and ICRC-3.
@@ -91,17 +71,19 @@ It is deployed from the official DFINITY `icrc1-index-ng` WASM release and depen
 
 ### Minter
 
-The **minter canister** is a custom Rust canister that acts as the ledger's minting account. It manages a set of _reserve accounts_ -- trusted system accounts whose VICI balance the minter keeps topped up via configurable rebalancing rules.
+The **minter canister** is a custom Rust canister that acts as the ledger's minting account. It manages a set of _reserve accounts_ — trusted system accounts whose VICI balance the minter keeps topped up via configurable rebalancing rules.
 
 The minter never mints tokens to arbitrary users. All minting flows through the reserve system with multiple layers of safety controls: global policy flags, per-reserve balance targets, lifetime minimum/maximum guarantees, per-operation caps, and sliding-window rate limits.
 
 A recurring **auto-rebalance timer** (1-hour interval) runs inside the canister, automatically refilling reserves when their balance drops below the configured target. This makes the minter self-operating — no external cron or scheduler required.
 
+The **app backend** holds funded reserve wallets and distributes VICI to individual users based on reward logic. The minter does not know about individual users.
+
 See the [minter README](src/minter/README.md) for a detailed description of its logic, API, and configuration.
 
 ## Tokenomics
 
-The token distribution model, supply schedule, and reserve allocation strategy are described in the [Tokenomics](TOKENOMICS.md) document.
+The token distribution model uses a **10-reserve** structure: 6 community sub-reserves (rewards, liquidity, oracle, staking, campaign, buffer) plus 4 non-community reserves (treasury, team, investors, advisors). The full design, including the dual-token rationale, is described in the [Tokenomics](TOKENOMICS.md) document.
 
 ## Project structure
 
@@ -156,6 +138,7 @@ bash scripts/format.sh
 
 ## Links
 
+- [Vici XP (vici-points)](https://github.com/AntoninoVentworthy/vici-points) — the gameplay/onboarding token
 - [ICRC-1 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md)
 - [ICRC-2 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md)
 - [ICRC-3 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)

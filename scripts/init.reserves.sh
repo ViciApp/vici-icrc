@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# Initialize minter reserves with per-bucket community sub-reserves.
+# Initialize minter reserves for VICI token (reward/coordination layer).
 #
 # Community 450M (45%) is split into six sub-reserves:
 #
 #   Bucket        Cap (VICI)  % of 45%  Auto-rebalance
 #   ─────────────────────────────────────────────────────
-#   forecast      135M        30%       yes
+#   rewards       180M        40%       yes
 #   liquidity     112.5M      25%       yes
-#   onboarding     67.5M      15%       yes
 #   oracle         67.5M      15%       yes
-#   campaign       45M        10%       yes
+#   staking        45M        10%       yes
+#   campaign       22.5M       5%       yes
 #   buffer         22.5M       5%       no (manual only)
 #
 # Plus four non-community reserves (all manual only):
@@ -80,14 +80,14 @@ MULT="$(pow10 "${DECIMALS}")"
 # ---------------------------------------------------------------------------
 
 # Community sub-reserves (must sum to 450M)
-CAP_FORECAST=$((135000000 * MULT))  # 30% of community
+CAP_REWARDS=$((180000000 * MULT))   # 40% of community
 CAP_LIQUIDITY=$((112500000 * MULT)) # 25% of community
-CAP_ONBOARDING=$((67500000 * MULT)) # 15% of community
 CAP_ORACLE=$((67500000 * MULT))     # 15% of community
-CAP_CAMPAIGN=$((45000000 * MULT))   # 10% of community
+CAP_STAKING=$((45000000 * MULT))    # 10% of community
+CAP_CAMPAIGN=$((22500000 * MULT))   #  5% of community
 CAP_BUFFER=$((22500000 * MULT))     #  5% of community
 
-COMMUNITY_SUM=$((CAP_FORECAST + CAP_LIQUIDITY + CAP_ONBOARDING + CAP_ORACLE + CAP_CAMPAIGN + CAP_BUFFER))
+COMMUNITY_SUM=$((CAP_REWARDS + CAP_LIQUIDITY + CAP_ORACLE + CAP_STAKING + CAP_CAMPAIGN + CAP_BUFFER))
 EXPECTED_COMMUNITY=$((450000000 * MULT)) # 45% of total
 if [[ "${COMMUNITY_SUM}" -ne "${EXPECTED_COMMUNITY}" ]]; then
   echo "ERROR: community sub-cap sum mismatch (${COMMUNITY_SUM} vs ${EXPECTED_COMMUNITY})." >&2
@@ -110,24 +110,25 @@ fi
 # ---------------------------------------------------------------------------
 # Daily emission budgets (whole tokens, for auto-rebalance config)
 #
-# Year 1-3 target: ~75M/year = ~205k/day total across all buckets.
+# Year 1-3 target: ~75M/year = ~100k/day total across community buckets.
+# More conservative than XP — VICI is scarce by design.
 # ---------------------------------------------------------------------------
 
-DAILY_FORECAST=80000
-DAILY_LIQUIDITY=60000
-DAILY_ONBOARDING=30000
-DAILY_ORACLE=20000
-DAILY_CAMPAIGN=10000
+DAILY_REWARDS=40000
+DAILY_LIQUIDITY=30000
+DAILY_ORACLE=15000
+DAILY_STAKING=10000
+DAILY_CAMPAIGN=5000
 
 # ---------------------------------------------------------------------------
 # Required environment variables (10 unique principals)
 # ---------------------------------------------------------------------------
 
 ALL_VARS=(
-  VICI_RESERVE_PRINCIPAL_FORECAST
+  VICI_RESERVE_PRINCIPAL_REWARDS
   VICI_RESERVE_PRINCIPAL_LIQUIDITY
-  VICI_RESERVE_PRINCIPAL_ONBOARDING
   VICI_RESERVE_PRINCIPAL_ORACLE
+  VICI_RESERVE_PRINCIPAL_STAKING
   VICI_RESERVE_PRINCIPAL_CAMPAIGN
   VICI_RESERVE_PRINCIPAL_BUFFER
   VICI_RESERVE_PRINCIPAL_TREASURY
@@ -181,7 +182,6 @@ fi
 # Reserve registration helpers
 # ---------------------------------------------------------------------------
 
-# Manual-only reserve (no auto-rebalance, no rate limits).
 call_add_manual_reserve() {
   local label="$1"
   local purpose="$2"
@@ -217,14 +217,6 @@ EOF
   "${dfx_base[@]}" call "${MINTER_CANISTER}" add_reserve "${candid}"
 }
 
-# Auto-rebalancing community sub-reserve.
-#
-# Derived parameters from daily_budget:
-#   target_balance          = daily_budget * 7 days  (1-week runway)
-#   min_balance             = daily_budget * 2 days  (refill trigger)
-#   max_topup_per_rebalance = target_balance         (full refill in one go)
-#   max_amount_per_day      = daily_budget * 2       (catch-up headroom)
-#   max_amount_per_year     = daily_budget * 365     (annual emission cap)
 call_add_auto_reserve() {
   local label="$1"
   local purpose="$2"
@@ -281,24 +273,24 @@ echo "Network: ${DFX_NETWORK}, minter: ${MINTER_CANISTER}, decimals: ${DECIMALS}
 echo ""
 
 echo "=== Community sub-reserves (auto-rebalance) ==="
-call_add_auto_reserve "forecast" \
-  "Community: forecast rewards (30% of 45%)" \
-  "${VICI_RESERVE_PRINCIPAL_FORECAST}" "${CAP_FORECAST}" "${DAILY_FORECAST}"
+call_add_auto_reserve "rewards" \
+  "Community: top-performer accuracy rewards (40% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_REWARDS}" "${CAP_REWARDS}" "${DAILY_REWARDS}"
 
 call_add_auto_reserve "liquidity" \
-  "Community: liquidity incentives (25% of 45%)" \
+  "Community: liquidity provider incentives (25% of 45%)" \
   "${VICI_RESERVE_PRINCIPAL_LIQUIDITY}" "${CAP_LIQUIDITY}" "${DAILY_LIQUIDITY}"
 
-call_add_auto_reserve "onboarding" \
-  "Community: new user onboarding (15% of 45%)" \
-  "${VICI_RESERVE_PRINCIPAL_ONBOARDING}" "${CAP_ONBOARDING}" "${DAILY_ONBOARDING}"
-
 call_add_auto_reserve "oracle" \
-  "Community: market/oracle rewards (15% of 45%)" \
+  "Community: market creation and oracle resolution (15% of 45%)" \
   "${VICI_RESERVE_PRINCIPAL_ORACLE}" "${CAP_ORACLE}" "${DAILY_ORACLE}"
 
+call_add_auto_reserve "staking" \
+  "Community: staking incentives (10% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_STAKING}" "${CAP_STAKING}" "${DAILY_STAKING}"
+
 call_add_auto_reserve "campaign" \
-  "Community: ecosystem campaigns (10% of 45%)" \
+  "Community: ecosystem campaigns, partnerships (5% of 45%)" \
   "${VICI_RESERVE_PRINCIPAL_CAMPAIGN}" "${CAP_CAMPAIGN}" "${DAILY_CAMPAIGN}"
 
 echo ""

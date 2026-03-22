@@ -17,10 +17,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Community sub-reserves (each needs a unique principal)
-export VICI_RESERVE_PRINCIPAL_FORECAST=""
+export VICI_RESERVE_PRINCIPAL_REWARDS=""
 export VICI_RESERVE_PRINCIPAL_LIQUIDITY=""
-export VICI_RESERVE_PRINCIPAL_ONBOARDING=""
 export VICI_RESERVE_PRINCIPAL_ORACLE=""
+export VICI_RESERVE_PRINCIPAL_STAKING=""
 export VICI_RESERVE_PRINCIPAL_CAMPAIGN=""
 export VICI_RESERVE_PRINCIPAL_BUFFER=""
 
