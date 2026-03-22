@@ -95,6 +95,8 @@ The **minter canister** is a custom Rust canister that acts as the ledger's mint
 
 The minter never mints tokens to arbitrary users. All minting flows through the reserve system with multiple layers of safety controls: global policy flags, per-reserve balance targets, lifetime minimum/maximum guarantees, per-operation caps, and sliding-window rate limits.
 
+A recurring **auto-rebalance timer** (1-hour interval) runs inside the canister, automatically refilling reserves when their balance drops below the configured target. This makes the minter self-operating — no external cron or scheduler required.
+
 See the [minter README](src/minter/README.md) for a detailed description of its logic, API, and configuration.
 
 ## Tokenomics
@@ -117,8 +119,8 @@ vici-icrc/
   scripts/
     build.ledger.args.sh              Generates ledger init/upgrade arguments
     build.index.args.sh               Generates index init arguments
-    init.reserves.sh                  Register minter reserves (tokenomics caps)
-    init.reserves.config.example.sh   Copy to init.reserves.config.sh (gitignored)
+    init.reserves.sh                  Register minter reserves (10 reserves, per-bucket caps)
+    init.reserves.config.example.sh   Copy to init.reserves.config.sh (10 principals, gitignored)
     did.sh                            Regenerates .did files from compiled WASM
     format.sh                         Code formatting
     lint.sh                           Linting

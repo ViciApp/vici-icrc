@@ -1,26 +1,42 @@
 #!/usr/bin/env bash
 #
-# Initialize minter reserves according to TOKENOMICS.md (allocation caps only).
+# Initialize minter reserves with per-bucket community sub-reserves.
 #
-# Registers five reserves — one per bucket — with:
-#   - lifetime_received_maximum = bucket cap (matches max in-use supply from minter for that account)
-#   - max_balance = same cap (account balance cannot exceed allocation)
-#   - min_balance / target_balance = 0 (no automatic mint until you raise targets or use manual top-up)
-#   - allow_auto_rebalance = false
-#   - allow_manual_topup = true
+# Community 450M (45%) is split into six sub-reserves:
+#
+#   Bucket        Cap (VICI)  % of 45%  Auto-rebalance
+#   ─────────────────────────────────────────────────────
+#   forecast      135M        30%       yes
+#   liquidity     112.5M      25%       yes
+#   onboarding     67.5M      15%       yes
+#   oracle         67.5M      15%       yes
+#   campaign       45M        10%       yes
+#   buffer         22.5M       5%       no (manual only)
+#
+# Plus four non-community reserves (all manual only):
+#
+#   treasury      200M (20%)
+#   team          150M (15%)
+#   investors     150M (15%)
+#   advisors       50M  (5%)
+#
+# Auto-rebalancing reserves are configured with:
+#   - target_balance          = 7 days of daily emission budget
+#   - min_balance             = 2 days of daily emission budget
+#   - max_topup_per_rebalance = target_balance
+#   - rate_limits             = 2x daily budget per day,
+#                               1x yearly budget per year
+#
+# The minter timer (1-hour interval) checks all reserves and refills
+# any that have dropped below target_balance — subject to all caps
+# and rate limits.
 #
 # Prerequisites:
-#   - bash, dfx (no Python required)
-#   - Minter deployed; caller must be minter controller for add_reserve
+#   - bash, dfx
+#   - Minter deployed; caller must be minter controller
 #
-# Reserve accounts: five ICRC-1 owner principals (subaccount = null). Supply them via:
-#
-#   1) Environment (what a wrapper script usually exports):
-#        VICI_RESERVE_PRINCIPAL_COMMUNITY, _TREASURY, _TEAM, _INVESTORS, _ADVISORS
-#   2) Five command-line arguments (same order as above).
-#
-# See scripts/init.reserves.config.example.sh — copy to init.reserves.config.sh (gitignored),
-# fill principals, run it (transparent local config; keeps secrets out of git).
+# Supply ten unique ICRC-1 owner principals via environment variables.
+# See scripts/init.reserves.config.example.sh for the full list.
 #
 # Optional:
 #   DFX_NETWORK (default: local)
@@ -47,7 +63,6 @@ case "${DECIMALS}" in
   ;;
 esac
 
-# 10^DECIMALS in base units (integer math only — avoids awk/Python float precision issues).
 pow10() {
   local d="$1"
   local r=1
@@ -60,69 +75,119 @@ pow10() {
 
 MULT="$(pow10 "${DECIMALS}")"
 
-# Whole-token amounts per TOKENOMICS.md (must sum to 1_000_000_000).
-CAP_COMMUNITY=$((450000000 * MULT)) # 45% lifetime cap (vesting + incentives)
-CAP_TREASURY=$((200000000 * MULT))  # 20% lifetime cap (vesting + incentives)
-CAP_TEAM=$((150000000 * MULT))      # 15% lifetime cap (vesting)
-CAP_INVESTORS=$((150000000 * MULT)) # 15% lifetime cap (vesting)
-CAP_ADVISORS=$((50000000 * MULT))   # 5% lifetime cap (vesting)
+# ---------------------------------------------------------------------------
+# Caps — lifetime_received_maximum per reserve (base units)
+# ---------------------------------------------------------------------------
 
-TOTAL_CAP=$((CAP_COMMUNITY + CAP_TREASURY + CAP_TEAM + CAP_INVESTORS + CAP_ADVISORS))
-EXPECTED_TOTAL=$((1000000000 * MULT))
+# Community sub-reserves (must sum to 450M)
+CAP_FORECAST=$((135000000 * MULT))  # 30% of community
+CAP_LIQUIDITY=$((112500000 * MULT)) # 25% of community
+CAP_ONBOARDING=$((67500000 * MULT)) # 15% of community
+CAP_ORACLE=$((67500000 * MULT))     # 15% of community
+CAP_CAMPAIGN=$((45000000 * MULT))   # 10% of community
+CAP_BUFFER=$((22500000 * MULT))     #  5% of community
+
+COMMUNITY_SUM=$((CAP_FORECAST + CAP_LIQUIDITY + CAP_ONBOARDING + CAP_ORACLE + CAP_CAMPAIGN + CAP_BUFFER))
+EXPECTED_COMMUNITY=$((450000000 * MULT)) # 45% of total
+if [[ "${COMMUNITY_SUM}" -ne "${EXPECTED_COMMUNITY}" ]]; then
+  echo "ERROR: community sub-cap sum mismatch (${COMMUNITY_SUM} vs ${EXPECTED_COMMUNITY})." >&2
+  exit 1
+fi
+
+# Non-community reserves
+CAP_TREASURY=$((200000000 * MULT))  # 20% of total
+CAP_TEAM=$((150000000 * MULT))      # 15% of total
+CAP_INVESTORS=$((150000000 * MULT)) # 15% of total
+CAP_ADVISORS=$((50000000 * MULT))   #  5% of total
+
+TOTAL_CAP=$((COMMUNITY_SUM + CAP_TREASURY + CAP_TEAM + CAP_INVESTORS + CAP_ADVISORS))
+EXPECTED_TOTAL=$((1000000000 * MULT)) # 100%
 if [[ "${TOTAL_CAP}" -ne "${EXPECTED_TOTAL}" ]]; then
-  echo "ERROR: internal cap sum mismatch (${TOTAL_CAP} vs ${EXPECTED_TOTAL})." >&2
+  echo "ERROR: total cap sum mismatch (${TOTAL_CAP} vs ${EXPECTED_TOTAL})." >&2
   exit 1
 fi
 
-usage() {
-  cat >&2 <<'EOF'
-Usage:
-  init.reserves.sh <community> <treasury> <team> <investors> <advisors>
+# ---------------------------------------------------------------------------
+# Daily emission budgets (whole tokens, for auto-rebalance config)
+#
+# Year 1-3 target: ~75M/year = ~205k/day total across all buckets.
+# ---------------------------------------------------------------------------
 
-Or export all five:
-  VICI_RESERVE_PRINCIPAL_COMMUNITY  VICI_RESERVE_PRINCIPAL_TREASURY  VICI_RESERVE_PRINCIPAL_TEAM
-  VICI_RESERVE_PRINCIPAL_INVESTORS  VICI_RESERVE_PRINCIPAL_ADVISORS
+DAILY_FORECAST=80000
+DAILY_LIQUIDITY=60000
+DAILY_ONBOARDING=30000
+DAILY_ORACLE=20000
+DAILY_CAMPAIGN=10000
 
-Or use scripts/init.reserves.config.example.sh (copy to init.reserves.config.sh).
-EOF
-}
+# ---------------------------------------------------------------------------
+# Required environment variables (10 unique principals)
+# ---------------------------------------------------------------------------
 
-if [[ "$#" -eq 5 ]]; then
-  VICI_RESERVE_PRINCIPAL_COMMUNITY="$1"
-  VICI_RESERVE_PRINCIPAL_TREASURY="$2"
-  VICI_RESERVE_PRINCIPAL_TEAM="$3"
-  VICI_RESERVE_PRINCIPAL_INVESTORS="$4"
-  VICI_RESERVE_PRINCIPAL_ADVISORS="$5"
-elif [[ "$#" -eq 0 ]]; then
-  missing=()
-  [[ -z "${VICI_RESERVE_PRINCIPAL_COMMUNITY:-}" ]] && missing+=(VICI_RESERVE_PRINCIPAL_COMMUNITY)
-  [[ -z "${VICI_RESERVE_PRINCIPAL_TREASURY:-}" ]] && missing+=(VICI_RESERVE_PRINCIPAL_TREASURY)
-  [[ -z "${VICI_RESERVE_PRINCIPAL_TEAM:-}" ]] && missing+=(VICI_RESERVE_PRINCIPAL_TEAM)
-  [[ -z "${VICI_RESERVE_PRINCIPAL_INVESTORS:-}" ]] && missing+=(VICI_RESERVE_PRINCIPAL_INVESTORS)
-  [[ -z "${VICI_RESERVE_PRINCIPAL_ADVISORS:-}" ]] && missing+=(VICI_RESERVE_PRINCIPAL_ADVISORS)
-  if [[ "${#missing[@]}" -gt 0 ]]; then
-    echo "ERROR: unset environment variables: ${missing[*]}" >&2
-    usage
-    exit 1
+ALL_VARS=(
+  VICI_RESERVE_PRINCIPAL_FORECAST
+  VICI_RESERVE_PRINCIPAL_LIQUIDITY
+  VICI_RESERVE_PRINCIPAL_ONBOARDING
+  VICI_RESERVE_PRINCIPAL_ORACLE
+  VICI_RESERVE_PRINCIPAL_CAMPAIGN
+  VICI_RESERVE_PRINCIPAL_BUFFER
+  VICI_RESERVE_PRINCIPAL_TREASURY
+  VICI_RESERVE_PRINCIPAL_TEAM
+  VICI_RESERVE_PRINCIPAL_INVESTORS
+  VICI_RESERVE_PRINCIPAL_ADVISORS
+)
+
+missing=()
+for var in "${ALL_VARS[@]}"; do
+  if [[ -z "${!var:-}" ]]; then
+    missing+=("${var}")
   fi
-else
-  echo "ERROR: pass exactly five principal arguments, or none (use env)." >&2
-  usage
+done
+if [[ "${#missing[@]}" -gt 0 ]]; then
+  echo "ERROR: unset environment variables: ${missing[*]}" >&2
+  echo "" >&2
+  echo "Export all ten principals, or use scripts/init.reserves.config.sh." >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Duplicate principal check (belt-and-suspenders; minter also rejects dupes)
+# ---------------------------------------------------------------------------
+
+all_principals=()
+for var in "${ALL_VARS[@]}"; do
+  all_principals+=("${!var}")
+done
+
+for ((i = 0; i < ${#all_principals[@]}; i++)); do
+  for ((j = i + 1; j < ${#all_principals[@]}; j++)); do
+    if [[ "${all_principals[i]}" == "${all_principals[j]}" ]]; then
+      echo "ERROR: ${ALL_VARS[i]} and ${ALL_VARS[j]} share the same principal '${all_principals[i]}'." >&2
+      echo "Each reserve must have a unique principal." >&2
+      exit 1
+    fi
+  done
+done
+
+# ---------------------------------------------------------------------------
+# dfx base command
+# ---------------------------------------------------------------------------
 
 dfx_base=(dfx canister --network "${DFX_NETWORK}")
 if [[ -n "${DFX_IDENTITY:-}" ]]; then
   dfx_base+=(--identity "${DFX_IDENTITY}")
 fi
 
-call_add_reserve() {
+# ---------------------------------------------------------------------------
+# Reserve registration helpers
+# ---------------------------------------------------------------------------
+
+# Manual-only reserve (no auto-rebalance, no rate limits).
+call_add_manual_reserve() {
   local label="$1"
   local purpose="$2"
   local principal="$3"
   local cap_nat="$4"
 
-  # Candid text: avoid double quotes inside purpose (or escape them).
   local candid
   candid=$(
     cat <<EOF
@@ -144,21 +209,121 @@ call_add_reserve() {
 EOF
   )
 
-  echo "--- add_reserve ${label} (${cap_nat} base units) ---"
+  echo "--- add_reserve ${label} [manual] (cap=${cap_nat}) ---"
   if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "${dfx_base[*]} call ${MINTER_CANISTER} add_reserve" "'${candid}'"
+    echo "${dfx_base[*]} call ${MINTER_CANISTER} add_reserve '${candid}'"
     return 0
   fi
   "${dfx_base[@]}" call "${MINTER_CANISTER}" add_reserve "${candid}"
 }
 
+# Auto-rebalancing community sub-reserve.
+#
+# Derived parameters from daily_budget:
+#   target_balance          = daily_budget * 7 days  (1-week runway)
+#   min_balance             = daily_budget * 2 days  (refill trigger)
+#   max_topup_per_rebalance = target_balance         (full refill in one go)
+#   max_amount_per_day      = daily_budget * 2       (catch-up headroom)
+#   max_amount_per_year     = daily_budget * 365     (annual emission cap)
+call_add_auto_reserve() {
+  local label="$1"
+  local purpose="$2"
+  local principal="$3"
+  local cap_nat="$4"
+  local daily_budget="$5"
+
+  local target=$((daily_budget * 7 * MULT))
+  local min=$((daily_budget * 2 * MULT))
+  local max_topup="${target}"
+  local rate_day=$((daily_budget * 2 * MULT))
+  local rate_year=$((daily_budget * 365 * MULT))
+
+  local candid
+  candid=$(
+    cat <<EOF
+(record {
+  account = record { owner = principal "${principal}"; subaccount = null };
+  min_balance = ${min} : nat;
+  target_balance = ${target} : nat;
+  max_balance = opt (${cap_nat} : nat);
+  max_topup_per_rebalance = opt (${max_topup} : nat);
+  lifetime_received_minimum = null;
+  lifetime_received_maximum = opt (${cap_nat} : nat);
+  rate_limits = opt record {
+    max_amount_per_hour = null;
+    max_amount_per_day = opt (${rate_day} : nat);
+    max_amount_per_week = null;
+    max_amount_per_month = null;
+    max_amount_per_year = opt (${rate_year} : nat);
+  };
+  enabled = true;
+  allow_manual_topup = true;
+  allow_auto_rebalance = true;
+  purpose = "${purpose}";
+  label = "${label}";
+})
+EOF
+  )
+
+  echo "--- add_reserve ${label} [auto] (cap=${cap_nat} target=${target} min=${min} rate_day=${rate_day} rate_year=${rate_year}) ---"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "${dfx_base[*]} call ${MINTER_CANISTER} add_reserve '${candid}'"
+    return 0
+  fi
+  "${dfx_base[@]}" call "${MINTER_CANISTER}" add_reserve "${candid}"
+}
+
+# ---------------------------------------------------------------------------
+# Register reserves
+# ---------------------------------------------------------------------------
+
 echo "Network: ${DFX_NETWORK}, minter: ${MINTER_CANISTER}, decimals: ${DECIMALS}"
-echo "Caps (base units): community=${CAP_COMMUNITY} treasury=${CAP_TREASURY} team=${CAP_TEAM} investors=${CAP_INVESTORS} advisors=${CAP_ADVISORS}"
+echo ""
 
-call_add_reserve "community" "Tokenomics: community incentives pool (45% lifetime cap)" "${VICI_RESERVE_PRINCIPAL_COMMUNITY}" "${CAP_COMMUNITY}"
-call_add_reserve "treasury" "Tokenomics: treasury (20% lifetime cap)" "${VICI_RESERVE_PRINCIPAL_TREASURY}" "${CAP_TREASURY}"
-call_add_reserve "team" "Tokenomics: team allocation (15% lifetime cap)" "${VICI_RESERVE_PRINCIPAL_TEAM}" "${CAP_TEAM}"
-call_add_reserve "investors" "Tokenomics: investors (15% lifetime cap)" "${VICI_RESERVE_PRINCIPAL_INVESTORS}" "${CAP_INVESTORS}"
-call_add_reserve "advisors" "Tokenomics: advisors (5% lifetime cap)" "${VICI_RESERVE_PRINCIPAL_ADVISORS}" "${CAP_ADVISORS}"
+echo "=== Community sub-reserves (auto-rebalance) ==="
+call_add_auto_reserve "forecast" \
+  "Community: forecast rewards (30% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_FORECAST}" "${CAP_FORECAST}" "${DAILY_FORECAST}"
 
+call_add_auto_reserve "liquidity" \
+  "Community: liquidity incentives (25% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_LIQUIDITY}" "${CAP_LIQUIDITY}" "${DAILY_LIQUIDITY}"
+
+call_add_auto_reserve "onboarding" \
+  "Community: new user onboarding (15% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_ONBOARDING}" "${CAP_ONBOARDING}" "${DAILY_ONBOARDING}"
+
+call_add_auto_reserve "oracle" \
+  "Community: market/oracle rewards (15% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_ORACLE}" "${CAP_ORACLE}" "${DAILY_ORACLE}"
+
+call_add_auto_reserve "campaign" \
+  "Community: ecosystem campaigns (10% of 45%)" \
+  "${VICI_RESERVE_PRINCIPAL_CAMPAIGN}" "${CAP_CAMPAIGN}" "${DAILY_CAMPAIGN}"
+
+echo ""
+echo "=== Community buffer (manual only) ==="
+call_add_manual_reserve "buffer" \
+  "Community: strategic buffer (5% of 45%, manual only)" \
+  "${VICI_RESERVE_PRINCIPAL_BUFFER}" "${CAP_BUFFER}"
+
+echo ""
+echo "=== Non-community reserves (manual only) ==="
+call_add_manual_reserve "treasury" \
+  "Tokenomics: treasury (20% lifetime cap)" \
+  "${VICI_RESERVE_PRINCIPAL_TREASURY}" "${CAP_TREASURY}"
+
+call_add_manual_reserve "team" \
+  "Tokenomics: team allocation (15% lifetime cap)" \
+  "${VICI_RESERVE_PRINCIPAL_TEAM}" "${CAP_TEAM}"
+
+call_add_manual_reserve "investors" \
+  "Tokenomics: investors (15% lifetime cap)" \
+  "${VICI_RESERVE_PRINCIPAL_INVESTORS}" "${CAP_INVESTORS}"
+
+call_add_manual_reserve "advisors" \
+  "Tokenomics: advisors (5% lifetime cap)" \
+  "${VICI_RESERVE_PRINCIPAL_ADVISORS}" "${CAP_ADVISORS}"
+
+echo ""
 echo "Done. Verify with: ${dfx_base[*]} call ${MINTER_CANISTER} list_reserves"

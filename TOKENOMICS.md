@@ -52,6 +52,37 @@ This is **policy and scheduling**, implemented by:
 
 **Intent:** stronger early incentives for bootstrapping, then a long tail to reduce speculative inflation pressure.
 
+### Community sub-reserves
+
+The 450M community allocation is **not** a single blob. It is split into six on-chain minter reserves, each with its own lifetime cap and rate limits enforced by the minter:
+
+| Reserve        | Cap (VICI) | % of 45% | Purpose                                   | Auto-rebalance |
+| -------------- | ---------- | -------- | ----------------------------------------- | -------------- |
+| **forecast**   | 135M       | 30%      | Forecast/prediction rewards               | yes            |
+| **liquidity**  | 112.5M     | 25%      | Liquidity provider incentives             | yes            |
+| **onboarding** | 67.5M      | 15%      | New user signup and activation bonuses    | yes            |
+| **oracle**     | 67.5M      | 15%      | Market creation and oracle resolution     | yes            |
+| **campaign**   | 45M        | 10%      | Ecosystem campaigns, partnerships, events | yes            |
+| **buffer**     | 22.5M      | 5%       | Strategic reserve for future needs        | no (manual)    |
+
+Sub-reserve caps sum exactly to 450M. Each is registered as a separate minter reserve with its own principal, so per-category caps are enforced on-chain — not just in application logic.
+
+### Daily emission budget
+
+Year 1–3 target: **~75M/year = ~205k VICI/day** across all community buckets.
+
+| Reserve        | Daily budget | Target balance (7 d) | Min balance (2 d) | Daily rate limit | Yearly rate limit |
+| -------------- | ------------ | -------------------- | ----------------- | ---------------- | ----------------- |
+| **forecast**   | 80k          | 560k                 | 160k              | 160k             | 29.2M             |
+| **liquidity**  | 60k          | 420k                 | 120k              | 120k             | 21.9M             |
+| **onboarding** | 30k          | 210k                 | 60k               | 60k              | 10.95M            |
+| **oracle**     | 20k          | 140k                 | 40k               | 40k              | 7.3M              |
+| **campaign**   | 10k          | 70k                  | 20k               | 20k              | 3.65M             |
+
+The minter's auto-rebalance timer checks every hour. When a reserve's balance drops below its target, the minter refills it — subject to all configured caps, rate limits, and the lifetime maximum. Daily rate limits are set at 2x the daily budget to allow catch-up after downtime.
+
+All parameters are adjustable at runtime via `update_reserve` — no canister redeployment required.
+
 ---
 
 ## Incentives: who earns VICI
@@ -160,12 +191,36 @@ Good behaviour → rewards; bad behaviour → slashing / burns (policy)
 
 ---
 
+## Operational architecture
+
+The minter and the app backend have distinct responsibilities:
+
+| Layer           | Responsibility                                                              |
+| --------------- | --------------------------------------------------------------------------- |
+| **Minter**      | Protocol-level emission control: lifetime caps, rate limits, auto-rebalance |
+| **App backend** | User-level distribution: who earns rewards, signup bonuses, per-user caps   |
+
+The app backend holds a funded reward wallet (one per community sub-reserve). The minter refills these wallets automatically. The backend distributes tokens to users based on application logic — the minter does not need to know about individual users, activity stats, or reward formulas.
+
+### Refill flow
+
+```text
+Minter timer fires (every 1 hour)
+  → for each auto-rebalance reserve:
+      → query ledger balance
+      → balance < target_balance?
+      → compute refill amount (capped by all limits)
+      → mint to reserve account
+  → backend wallet stays funded
+  → backend distributes to users based on app logic
+```
+
 ## Engineering and design items still to specify
 
 The minter enforces **per-reserve** and **global** limits; it does not encode prediction markets or vesting. Open items for protocol specs:
 
-- Exact **minting schedules** per reserve vs. **emission curve** above.
-- **Reward formulas** per action type.
+- **Reward formulas** per action type (backend responsibility).
+- **Per-user caps** and anti-Sybil enforcement (backend responsibility).
 - **Slash** percentages and beneficiaries (burn vs. treasury).
 - **Staking** lock durations and unstaking delays.
 - **Reputation** ↔ token weighting.

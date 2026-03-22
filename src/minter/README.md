@@ -67,6 +67,19 @@ Mint events older than 1 year are pruned automatically after every mint.
 - `lifetime_received_minimum`: a monotonically increasing guarantee. If the minter has minted less than this amount to the reserve over its entire history, additional tokens are minted to cover the gap. This value can only be increased via `update_reserve`, never decreased.
 - `lifetime_received_maximum`: a hard ceiling. Once `lifetime_minted` reaches this value, no further minting is allowed for the reserve regardless of balance deficits.
 
+### Auto-rebalance timer
+
+The minter runs a recurring timer (1-hour interval) that automatically rebalances all reserves. On each tick, the timer calls `rebalance_all` internally — the same logic used by the `rebalance_all_reserves` admin endpoint.
+
+Key properties:
+
+- **Starts on init and post-upgrade.** IC clears all timers on canister upgrade, so `post_upgrade` re-arms the timer.
+- **Serial execution.** Uses `set_timer_interval_serial` from `ic-cdk-timers`: if a rebalance cycle is still running when the next tick fires, the new invocation is skipped. No concurrent executions, no manual reentrancy guard.
+- **Only affects reserves with `allow_auto_rebalance = true`.** Reserves configured with `allow_auto_rebalance = false` are skipped during the timer cycle.
+- **Same safety constraints as manual calls.** All caps, rate limits, lifetime maximums, and global policy checks apply identically.
+
+The timer is the steady-state heartbeat. Manual `rebalance_reserve` and `manual_topup_reserve` remain available for on-demand operations (emergency refill, initial funding, post-reconfiguration).
+
 ### Global policy
 
 A canister-wide `GlobalPolicy` provides:
@@ -121,18 +134,26 @@ All query methods reject anonymous callers.
 
 The entire canister state (reserves, counters, policy, idempotency map) is Candid-encoded and written to IC stable memory during `pre_upgrade`. On `post_upgrade`, the state is restored. This ensures data survives canister code upgrades.
 
+## Duplicate account guard
+
+Each reserve must have a unique ICRC-1 account (principal + optional subaccount). The minter rejects `add_reserve` calls with an account that is already registered (`ReserveAccountAlreadyExists`). Accounts are immutable after creation — `update_reserve` does not expose an `account` field, so a reserve's account can never be changed to collide with another.
+
+The `init.reserves.sh` script also validates uniqueness before making any `dfx` calls, catching duplicates early at the configuration level.
+
 ## Code structure
 
 ```
 src/minter/src/
-  lib.rs             Canister lifecycle (init, pre/post upgrade), Candid export
+  lib.rs             Canister lifecycle (init, pre/post upgrade, timer start), Candid export
   model.rs           All data types (Candid API types + internal types)
   state.rs           State, thread-local storage, stable memory persistence
   guards.rs          Access control guards (caller_is_controller, caller_is_not_anonymous)
   api/
-    admin.rs         Update methods (reserve CRUD, rebalance, manual topup, preview)
-    query.rs         Query methods (list/get reserves, policy, ledger id)
+    admin/           Update methods (reserve CRUD, rebalance, manual topup, preview)
+    query/           Query methods (list/get reserves, policy, ledger id)
   services/
     ledger.rs        ICRC-1 ledger client (balance queries, mint transfers)
+    rebalance.rs     Core rebalance execution (single + all reserves)
     reserve.rs       Pure business logic (validation, rebalance computation, rate limits)
+    timer.rs         Recurring auto-rebalance timer (1-hour interval)
 ```
