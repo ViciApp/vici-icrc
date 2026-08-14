@@ -4,14 +4,14 @@ VICI is the reward and coordination token for the [Vici](https://vici.com) predi
 
 VICI is the **scarce reward layer** of Vici's dual-token model. It is earned by top and most active users through accuracy, liquidity provision, market creation, and oracle work. It provides real utility from day one: feature access, advanced modes, private competitions, staking, and governance.
 
-For the gameplay point system, see [vici-points](https://github.com/AntoninoVentworthy/vici-points) (VXP).
+For the gameplay point system, see [vici-points](https://github.com/ViciApp/vici-points) (VXP).
 
 ## Dual-token model
 
-| Token          | Symbol | Role                                   | Repo                                                             |
-| -------------- | ------ | -------------------------------------- | ---------------------------------------------------------------- |
-| **Vici XP**    | VXP    | Gameplay / onboarding — everyone earns | [vici-points](https://github.com/AntoninoVentworthy/vici-points) |
-| **VICI Token** | VICI   | Reward / coordination — top users earn | **this repo**                                                    |
+| Token          | Symbol | Role                                   | Repo                                                  |
+| -------------- | ------ | -------------------------------------- | ----------------------------------------------------- |
+| **Vici XP**    | VXP    | Gameplay / onboarding — everyone earns | [vici-points](https://github.com/ViciApp/vici-points) |
+| **VICI Token** | VICI   | Reward / coordination — top users earn | **this repo**                                         |
 
 ## Standards implemented
 
@@ -138,7 +138,7 @@ bash scripts/format.sh
 
 ## Links
 
-- [Vici XP (vici-points)](https://github.com/AntoninoVentworthy/vici-points) — the gameplay/onboarding token
+- [Vici XP (vici-points)](https://github.com/ViciApp/vici-points) — the gameplay/onboarding token
 - [ICRC-1 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md)
 - [ICRC-2 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md)
 - [ICRC-3 Standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
