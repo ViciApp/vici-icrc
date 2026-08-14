@@ -8,10 +8,10 @@ For the gameplay point system, see [vici-points](https://github.com/ViciApp/vici
 
 ## Dual-token model
 
-| Token          | Symbol | Role                                   | Repo                                                             |
-| -------------- | ------ | -------------------------------------- | ---------------------------------------------------------------- |
-| **Vici XP**    | VXP    | Gameplay / onboarding — everyone earns | [vici-points](https://github.com/ViciApp/vici-points)            |
-| **VICI Token** | VICI   | Reward / coordination — top users earn | **this repo**                                                    |
+| Token          | Symbol | Role                                   | Repo                                                  |
+| -------------- | ------ | -------------------------------------- | ----------------------------------------------------- |
+| **Vici XP**    | VXP    | Gameplay / onboarding — everyone earns | [vici-points](https://github.com/ViciApp/vici-points) |
+| **VICI Token** | VICI   | Reward / coordination — top users earn | **this repo**                                         |
 
 ## Standards implemented
 
