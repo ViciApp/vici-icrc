@@ -11,7 +11,7 @@ Vici operates a dual-token model:
 
 | Token                                                                          | Symbol | Role                        | Who earns                        | Friction   |
 | ------------------------------------------------------------------------------ | ------ | --------------------------- | -------------------------------- | ---------- |
-| **Vici XP** ([vici-points](https://github.com/AntoninoVentworthy/vici-points)) | VXP    | Gameplay / onboarding layer | Everyone — every user, instantly | Zero       |
+| **Vici XP** ([vici-points](https://github.com/ViciApp/vici-points)) | VXP    | Gameplay / onboarding layer | Everyone — every user, instantly | Zero       |
 | **VICI Token** (this repo)                                                     | VICI   | Reward / coordination layer | Top / most active users — scarce | Higher bar |
 
 A third layer — **settlement** (stablecoin for real-money prediction markets) — is a separate, future concern and is not part of either token.
@@ -291,4 +291,4 @@ Today, minting policy is enforced by **minter configuration** (admin-controlled 
 
 - [Minter canister — reserves and minting](src/minter/README.md)
 - [Project README](README.md)
-- [Vici XP (vici-points)](https://github.com/AntoninoVentworthy/vici-points) — the gameplay/onboarding token
+- [Vici XP (vici-points)](https://github.com/ViciApp/vici-points) — the gameplay/onboarding token

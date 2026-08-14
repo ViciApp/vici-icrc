@@ -88,4 +88,4 @@ Users never interact with the minter. They just see VICI arrive.
 
 - [Tokenomics](TOKENOMICS.md) — full economic design
 - [Minter README](src/minter/README.md) — how the reserve system works
-- [Vici XP](https://github.com/AntoninoVentworthy/vici-points) — the gameplay/onboarding token
+- [Vici XP](https://github.com/ViciApp/vici-points) — the gameplay/onboarding token
