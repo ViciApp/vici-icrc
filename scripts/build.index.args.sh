@@ -8,6 +8,8 @@ set -euo pipefail
 # The interface of the Init variant can be found here:
 # https://github.com/dfinity/ic/blob/d5b336cf169b3fec81385701a23e92388e8f77ae/rs/ledger_suite/icrc1/index-ng/src/lib.rs#L17
 
+ECHO() { echo "$@"; }
+
 ECHO "Building Index args..."
 
 MODE="${1:-auto}"
