@@ -8,6 +8,8 @@ set -euo pipefail
 # The interface of the Init variant can be found here:
 # https://github.com/dfinity/ic/blob/d5b336cf169b3fec81385701a23e92388e8f77ae/rs/ledger_suite/icrc1/ledger/src/lib.rs#L270
 
+ECHO() { echo "$@"; }
+
 ECHO "Building Ledger args..."
 
 MODE="${1:-auto}"
@@ -73,7 +75,20 @@ else
 fi
 
 PRINCIPAL="$(dfx identity get-principal)"
-MINTER_PRINCIPAL="${MINTER_PRINCIPAL:-$PRINCIPAL}"
+
+# The minting account must be the minter canister, never a person: whoever
+# holds the minting account can mint without limit. So there is no fallback to
+# the deploying identity; an unresolvable minter is a hard error.
+MINTER_PRINCIPAL="${MINTER_PRINCIPAL:-$(dfx canister id minter --network "$DFX_NETWORK" 2>/dev/null || true)}"
+if [[ -z "$MINTER_PRINCIPAL" ]]; then
+  ECHO "ERROR: could not resolve the minter canister id on '$DFX_NETWORK'."
+  ECHO "       Create the minter first, or set MINTER_PRINCIPAL to its canister id."
+  exit 1
+fi
+if [[ "$MINTER_PRINCIPAL" == "$PRINCIPAL" ]]; then
+  ECHO "ERROR: MINTER_PRINCIPAL is the deploying identity; it must be the minter canister."
+  exit 1
+fi
 ECHO "Using minter principal: $MINTER_PRINCIPAL"
 
 if [[ "$MODE" == "upgrade" ]]; then
