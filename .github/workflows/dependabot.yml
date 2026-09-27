@@ -1,0 +1,80 @@
+name: Dependabot
+
+# Keeps open Dependabot PRs mergeable under the "branch must be up to date" rule:
+# - when a Dependabot PR merges, every other open Dependabot PR is recreated on top of the new main;
+# - when the Checks workflow finishes on a Dependabot PR that has fallen behind main, it is rebased.
+#
+# Dependabot only acts on commands from accounts with write access. Set the DEPENDABOT_COMMENT_TOKEN
+# secret (a token with pull-requests:write) if it ignores comments posted with the default token.
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_run:
+    workflows: [Checks]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  recreate:
+    name: Recreate Open Dependabot PRs
+    # pull_request_target runs in the context of main and never checks out the PR, so it is safe here.
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.merged &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: dependabot-recreate
+      cancel-in-progress: false
+    permissions:
+      pull-requests: write # Required to comment on the Dependabot PRs.
+
+    steps:
+      - name: Comment @dependabot recreate
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_COMMENT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh pr list --author app/dependabot --state open --limit 100 --json number --jq '.[].number' |
+            while read -r pr; do
+              gh pr comment "$pr" --body '@dependabot recreate'
+            done
+
+  rebase:
+    name: Rebase Dependabot PR
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: dependabot-rebase-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write # Required to comment on the Dependabot PR.
+      contents: read # Required to compare the PR head with main.
+
+    steps:
+      - name: Comment @dependabot rebase if behind main
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_COMMENT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --author app/dependabot --state open --head "$HEAD_BRANCH" --json number,baseRefName,headRefOid \
+            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | \"\(.number) \(.baseRefName)\"")
+          if [[ -z "$pr" ]]; then
+            echo "No open Dependabot PR at $HEAD_SHA on $HEAD_BRANCH (closed or already updated)."
+            exit 0
+          fi
+          read -r number base <<< "$pr"
+
+          behind=$(gh api "repos/$GH_REPO/compare/$base...$HEAD_SHA" --jq '.behind_by')
+          if [[ "$behind" -gt 0 ]]; then
+            gh pr comment "$number" --body '@dependabot rebase'
+          else
+            echo "PR #$number is up to date with $base."
+          fi
